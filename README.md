@@ -2,7 +2,7 @@
 
 A reproduction of **Implicit Neural Representations with Periodic Activation Functions** (SIREN, Sitzmann et al., NeurIPS 2020) using the [official code](https://github.com/vsitzmann/siren), run end to end on Google Colab.
 
-All four main-paper figures were reproduced: image fitting (Fig. 1), video fitting (Fig. 2), Poisson image reconstruction and editing (Fig. 3), and shape representation with signed distance functions (Fig. 4). Training used the official scripts and their default settings; every change needed to run them on Colab is listed under [Deviations from the official setup](#deviations-from-the-official-setup).
+Reproduced so far: image fitting (Fig. 1), video fitting (Fig. 2), Poisson image reconstruction and editing (Fig. 3), shape representation with signed distance functions (Fig. 4), and generalization by image inpainting on CelebA (Fig. 6). The Helmholtz experiments (Fig. 5) are still running. Training used the official scripts and their default settings; every change needed to run them on Colab is listed under [Deviations from the official setup](#deviations-from-the-official-setup).
 
 ## Results
 
@@ -46,6 +46,27 @@ Left: a SIREN supervised only by the image's gradients (Fitting ∇f) or only by
 SDFs fitted directly on oriented point clouds of the Thai statue and a living room, meshes extracted at 1600³. Left: close-up and full view of the statue. Right: the room. ReLU and SIREN are rendered with identical cameras and lighting. SIREN recovers the carved faces and the furniture; ReLU produces blobby, faceted surfaces.
 
 ![Fig. 4 reproduction](figures/fig4_reproduction.png)
+
+### Fig. 6 — Generalization: image inpainting on CelebA
+
+A SIREN can also be predicted instead of fitted. A convolutional encoder maps the observed (context) pixels of a 32 × 32 CelebA face to a latent code, and a hypernetwork maps that code to the weights of a SIREN that represents the whole image. The model is trained once on the 162,770 training images and then completes unseen test faces from 10, 100 or 1,000 random pixels, or from the top half of the image (512 pixels).
+
+Top row: the pixels given to the model (white = not given). Bottom row: the image produced by the predicted SIREN. In the GT column, the top is the ground truth and the bottom is the reconstruction from all 1,024 pixels. The paper does not say which faces it shows, so we use test images 3 and 21.
+
+![Fig. 6 reproduction](figures/fig6_reproduction.png)
+
+Mean squared error over the 19,962 test images (official `test_conv_neural_process.py`), compared with the "CNN Encoder + Hypernet." row of the paper's Table 4:
+
+| Context pixels | 10 | 100 | 1000 | 512 (half) | 1024 (full) |
+|---|---|---|---|---|---|
+| Paper | 0.033 | 0.009 | 0.008 | 0.020 | 0.008 |
+| Ours | 0.0327 | 0.0098 | 0.0101 | 0.0207 | 0.0109 |
+
+10, 100 and half-image context match the paper. 1000 pixels and the full image are worse because the official training script samples 10–200 context pixels per image, while the supplement trains the convolutional encoder with 10–1000 (see [Deviations](#deviations-from-the-official-setup)); our model never saw more than 200 pixels during training.
+
+Test images 3 and 21 and three random test images (12715, 10204, 16978):
+
+<img src="figures/fig6_more.png" width="380" alt="Fig. 6, more test images">
 
 ## Training logs
 
@@ -110,7 +131,8 @@ Final value of every logged scalar:
 .
 ├── README.md
 ├── SIREN_1.ipynb          # Colab notebook: every step, with a description under each cell
-├── figures/               # reproduced Fig. 1–4 and the PSNR curve
+├── fig6_re.ipynb          # Colab notebook for Fig. 6: CelebA download, training, test, figure
+├── figures/               # reproduced Fig. 1–4, Fig. 6 and the PSNR curve
 └── logs/                  # one folder per experiment
     ├── poisson_comp/
     ├── poisson_comp_v2/
@@ -130,6 +152,7 @@ Final value of every logged scalar:
 1. Open `SIREN_1.ipynb` in Google Colab and select a GPU runtime.
 2. Run the cells in order. Each cell has a short description below it. Logs are written to `MyDrive/siren_reproduction/logs`, so a disconnect does not lose finished runs.
 3. Approximate training time on one GPU: image fitting a few minutes per model; video about 4 h per model; SDF about 4.4 h per statue model and 9.5 h per room model (about 12 steps/s).
+4. Fig. 6: run `fig6_re.ipynb`. It downloads CelebA from Kaggle (about 1.4 GB) to the local disk, trains the model (652,828 steps, 13.8 h at about 13 steps/s), runs the official test (about 10 min) and draws the figure.
 
 ## Deviations from the official setup
 
@@ -139,6 +162,8 @@ None of these change the model architectures, losses or optimizer.
 - Installed the packages the scripts import that Colab lacks (`cmapy`, `scikit-video`, `configargparse`, etc.) instead of the conda `environment.yml`.
 - Patched the installed `scikit-video` to replace `np.int` / `np.float` / `np.bool`, which current NumPy removed.
 - In `sdf_meshing.py`, replaced `skimage.measure.marching_cubes_lewiner` (removed in scikit-image 0.19) with `marching_cubes`. Its default method is Lewiner, so extracted meshes are unchanged.
+- In `utils.py`, `write_helmholtz_summary` refers to `meta_modules.NeuralProcessImplicit2DHypernetBVP`, which no longer exists; that check is only for hypernetwork models and was replaced by `False`. `skimage.measure.compare_ssim` / `compare_psnr` (removed from scikit-image) were replaced by `skimage.metrics.structural_similarity` (`channel_axis=-1` instead of `multichannel=True`) and `peak_signal_noise_ratio`. They only write PSNR/SSIM summaries.
+- `test_conv_neural_process.py` saves three extra images (upsampling, out-of-range, interpolation) as float arrays; as a precaution against recent `imageio` versions they are converted to `uint8` before saving. The test images and MSE values are unchanged.
 - Some script names and paths differ from the README (`train_sdf.py` / `test_sdf.py`, `train_poisson_lapl_img.py`); hard-coded paths to the authors' machines were redirected to local files.
 
 **Data**
@@ -146,21 +171,25 @@ None of these change the model architectures, losses or optimizer.
 - Poisson reconstruction: BSDS500 training image index 19 (the starfish), as in the official script.
 - Poisson editing: the authors' `gizeh.jpg` and `bear.jpg` are not public. We used [Pyramids of Geezeh](https://commons.wikimedia.org/wiki/File:Pyramids_of_Geezeh.jpg) (public domain) and [Polar bear arctic](https://commons.wikimedia.org/wiki/File:Polar_bear_arctic.JPG) by Brocken Inaglory (see its Commons page for the license), resized to the sizes the code expects. The bear was cut out with `rembg` and placed on a background matching the code's padding gray (0.85).
 - SDF: `thai_statue.xyz` and `interior_room.xyz` from the authors' shared data folder.
+- CelebA: the aligned images and `list_eval_partition.csv` from Kaggle (`jessicali9530/celeba-dataset`), the layout the official `dataio.CelebA` expects; its hard-coded path was redirected to the download.
 
 **Training**
 - SDF: `batch_size=250000` as given in the official README. `epochs_til_ckpt` was raised from 1 to 100 to avoid writing 10,000 checkpoints; this affects only how often weights are saved.
 - SDF room network width: the paper's supplement states 1024 units per layer for the room, but the official `train_sdf.py` builds the default 256-unit network with no option to change it. Both room models here are 256 wide, following the official code.
 - SDF training length: 10,000 epochs (the script default) equals about 190k steps for the statue and 410k for the room, longer than the 50,000 iterations in the supplement.
+- CelebA (Fig. 6): `train_img_neural_process.py --conv_encoder` with the script defaults: 401 epochs, batch 100, 10–200 context pixels. The supplement instead gives 175 epochs, batch 200 and 10–1000 context pixels for the convolutional encoder (10–200 is its setting for the set encoder). `epochs_til_ckpt` was raised from 10 to 50 because each checkpoint is about 260 MB.
 - The room SIREN run was interrupted and resumed from its last checkpoint (`sdf_room_sine` → `sdf_room_sine_resume`). The official code saves only model weights, so the Adam optimizer state was reset at the resume point.
 
 **Figures**
 - Fig. 1 logs were written to the Colab instance's local disk and were lost when the session ended; only the generated figures are kept.
+- Fig. 6: the paper does not give the indices of its two faces. The context pixels in the figure are sampled with a fixed seed, so they differ from those in the paper.
 - Fig. 4: the repository contains no rendering code, and the paper does not describe its renderer or cameras (the README suggests viewing meshes in MeshLab). Meshes were rendered with pyrender, and cameras were aligned by hand to the paper's figure.
 
 ## Not included
 
 - The full TensorBoard event files and intermediate checkpoints (over 10 GB in total).
 - The extracted meshes (`test.ply`, 150–830 MB each), which exceed GitHub's file size limit.
+- The CelebA model weights (about 260 MB, over GitHub's 100 MB limit) and the 100,000 test images written by `test_conv_neural_process.py`.
 
 ## Reference
 
