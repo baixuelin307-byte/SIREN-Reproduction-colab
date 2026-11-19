@@ -8,13 +8,23 @@ Reproduced so far: image fitting (Fig. 1), video fitting (Fig. 2), Poisson image
 
 ### Fig. 1 — Image fitting
 
-Five architectures fit the cameraman image: ReLU, Tanh, ReLU with positional encoding, RBF-ReLU and SIREN. Rows show the reconstruction, its gradient and its Laplacian. SIREN reproduces both the image and its derivatives; the baselines lose fine detail and produce noisy or empty second derivatives, as in the paper.
+Five architectures fit the 256 × 256 cameraman image for 15,000 iterations (Adam, learning rate 1e-4): ReLU, Tanh, ReLU with positional encoding, RBF-ReLU and SIREN. Left: the reconstruction, its gradient and its Laplacian at the end of training. Right: PSNR at every iteration over the whole run and over the first 500 iterations. SIREN reproduces both the image and its derivatives; the baselines lose fine detail and produce noisy or empty second derivatives, as in the paper.
 
 ![Fig. 1 reproduction](figures/fig1_reproduction.png)
 
-PSNR during training:
+PSNR, mean over the last 1,000 iterations (paper values read from its plot):
 
-![PSNR curves](figures/psnr_curve.png)
+| Model | Ours (dB) | Paper (dB) |
+|---|---|---|
+| ReLU | 25.8 | ≈ 25 |
+| Tanh | 26.0 | ≈ 25 |
+| ReLU P.E. | 43.2 | ≈ 40 |
+| RBF-ReLU | 31.3 | ≈ 28 |
+| SIREN | 56.7 | ≈ 50 |
+
+The four baselines end close to the paper. SIREN goes higher (56.7 dB): after about 6,000 iterations it mostly stays between 55 and 60 dB, where the error is so small (MSE around 1e-6) that Adam becomes unstable from time to time. The PSNR then drops sharply and recovers within a few hundred iterations. The paper's curve stays near 50 dB and shows no such drops. The curves are plotted unsmoothed, as logged.
+
+PSNR is computed at every iteration from the logged training loss (the MSE of the image in [-1, 1]): PSNR = 10 log10(4 / MSE). The official `write_psnr`, logged every 500 iterations, first clips the prediction to [0, 1]; both agree closely.
 
 ### Fig. 2 — Video fitting
 
@@ -85,6 +95,26 @@ Final value of every logged scalar:
 
 | Experiment | Tag | Final step | Final value |
 |---|---|---|---|
+| `fig1_256_rbf_relu` | `img_loss` | 14999 | 0.00328409 |
+| `fig1_256_rbf_relu` | `total_train_loss` | 14999 | 0.00328409 |
+| `fig1_256_rbf_relu` | `train_img_psnr` | 14500 | 30.6614 |
+| `fig1_256_rbf_relu` | `train_img_ssim` | 14500 | 0.892267 |
+| `fig1_256_relu` | `img_loss` | 14999 | 0.00998732 |
+| `fig1_256_relu` | `total_train_loss` | 14999 | 0.00998732 |
+| `fig1_256_relu` | `train_img_psnr` | 14500 | 25.947 |
+| `fig1_256_relu` | `train_img_ssim` | 14500 | 0.749078 |
+| `fig1_256_relu_pe` | `img_loss` | 14999 | 0.00017638 |
+| `fig1_256_relu_pe` | `total_train_loss` | 14999 | 0.00017638 |
+| `fig1_256_relu_pe` | `train_img_psnr` | 14500 | 43.3386 |
+| `fig1_256_relu_pe` | `train_img_ssim` | 14500 | 0.981973 |
+| `fig1_256_siren` | `img_loss` | 14999 | 1.19087e-06 |
+| `fig1_256_siren` | `total_train_loss` | 14999 | 1.19087e-06 |
+| `fig1_256_siren` | `train_img_psnr` | 14500 | 49.6516 |
+| `fig1_256_siren` | `train_img_ssim` | 14500 | 0.995581 |
+| `fig1_256_tanh` | `img_loss` | 14999 | 0.00960764 |
+| `fig1_256_tanh` | `total_train_loss` | 14999 | 0.00960764 |
+| `fig1_256_tanh` | `train_img_psnr` | 14500 | 26.067 |
+| `fig1_256_tanh` | `train_img_ssim` | 14500 | 0.736968 |
 | `poisson_comp` | `gradients_loss` | 9999 | 0.0153353 |
 | `poisson_comp` | `total_train_loss` | 9999 | 0.0153353 |
 | `poisson_comp_v2` | `gradients_loss` | 9999 | 0.00912066 |
@@ -134,6 +164,11 @@ Final value of every logged scalar:
 ├── fig6_re.ipynb          # Colab notebook for Fig. 6: CelebA download, training, test, figure
 ├── figures/               # reproduced Fig. 1–4, Fig. 6 and the PSNR curve
 └── logs/                  # one folder per experiment
+    ├── fig1_256_rbf_relu/
+    ├── fig1_256_relu/
+    ├── fig1_256_relu_pe/
+    ├── fig1_256_siren/
+    ├── fig1_256_tanh/
     ├── poisson_comp/
     ├── poisson_comp_v2/
     ├── poisson_grad/
@@ -174,6 +209,7 @@ None of these change the model architectures, losses or optimizer.
 - CelebA: the aligned images and `list_eval_partition.csv` from Kaggle (`jessicali9530/celeba-dataset`), the layout the official `dataio.CelebA` expects; its hard-coded path was redirected to the download.
 
 **Training**
+- Image fitting (Fig. 1): the paper does not state the image size. `train_img.py` fits the 512 × 512 cameraman, where SIREN stays near 40 dB, far below the paper's plot; the official `explore_siren.ipynb` fits it at 256 × 256. We copy the script as `train_img_256.py` with `dataio.Camera(downsample_factor=2)` and `sidelength=256`, and train for 15,000 iterations as stated in the paper (script default: 10,000). `Image.ANTIALIAS` (removed from Pillow) was replaced by `Image.LANCZOS`, the same filter. The paper's own resizing may differ (`explore_siren.ipynb` uses torchvision's `Resize`), which could explain part of the gap in SIREN's PSNR.
 - SDF: `batch_size=250000` as given in the official README. `epochs_til_ckpt` was raised from 1 to 100 to avoid writing 10,000 checkpoints; this affects only how often weights are saved.
 - SDF room network width: the paper's supplement states 1024 units per layer for the room, but the official `train_sdf.py` builds the default 256-unit network with no option to change it. Both room models here are 256 wide, following the official code.
 - SDF training length: 10,000 epochs (the script default) equals about 190k steps for the statue and 410k for the room, longer than the 50,000 iterations in the supplement.
@@ -181,7 +217,7 @@ None of these change the model architectures, losses or optimizer.
 - The room SIREN run was interrupted and resumed from its last checkpoint (`sdf_room_sine` → `sdf_room_sine_resume`). The official code saves only model weights, so the Adam optimizer state was reset at the resume point.
 
 **Figures**
-- Fig. 1 logs were written to the Colab instance's local disk and were lost when the session ended; only the generated figures are kept.
+- Fig. 1: a first run with the script defaults (512 × 512, 10,000 iterations) was logged to the Colab instance's local disk and lost. The figure and logs here are from the 256 × 256 runs (`logs/fig1_256_*`). The Laplacian colour bar is only a sign guide: the official summary normalizes each image separately.
 - Fig. 6: the paper does not give the indices of its two faces. The context pixels in the figure are sampled with a fixed seed, so they differ from those in the paper.
 - Fig. 4: the repository contains no rendering code, and the paper does not describe its renderer or cameras (the README suggests viewing meshes in MeshLab). Meshes were rendered with pyrender, and cameras were aligned by hand to the paper's figure.
 
