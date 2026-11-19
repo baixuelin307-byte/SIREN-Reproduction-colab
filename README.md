@@ -42,6 +42,21 @@ PSNR is computed at every iteration from the logged training loss (the MSE of th
 
 (Mean over the last 1,000 iterations.) With the original image ReLU, Tanh and RBF-ReLU move slightly closer to the paper and ReLU P.E. slightly further away, but SIREN still ends near 55 dB, so the change of image does not explain SIREN's higher PSNR. The Adam drops appear with both images.
 
+#### PSNR over iterations
+
+The PSNR plots of both image versions, enlarged. Top: the whole run (15,000 iterations). Bottom: the first 500 iterations, the zoom in the paper's figure. Both are plotted unsmoothed, from the loss logged at every iteration.
+
+<table>
+<tr>
+<td align="center"><img src="figures/psnr_curve.png" width="320" alt="PSNR, new cameraman"><br>new image (current scikit-image)</td>
+<td align="center"><img src="figures/psnr_curve_oldcam.png" width="320" alt="PSNR, original cameraman"><br>original image (scikit-image 0.17)</td>
+</tr>
+</table>
+
+- **First 500 iterations.** The order matches the paper's zoom: SIREN rises fastest and reaches about 34–35 dB at iteration 500 (paper: about 31 dB), followed by RBF-ReLU (about 23.5 dB), ReLU P.E. (20–22 dB), ReLU (about 19 dB) and Tanh (about 16 dB).
+- **Whole run.** SIREN passes 50 dB within about 2,000 iterations and then stays far above the rest. ReLU P.E. keeps improving and overtakes RBF-ReLU after about 2,500 iterations; ReLU, Tanh and RBF-ReLU level off below 32 dB.
+- **SIREN's drops.** Once SIREN is above about 55 dB, the PSNR falls sharply from time to time and recovers within a few hundred iterations: four times with the new image (around 6,300, 10,000, 11,300 and 14,500 iterations), once with the original (around 8,000). At that error level (MSE around 1e-6) an Adam step can overshoot. The paper's curve shows no such drops.
+
 ### Fig. 2 — Video fitting
 
 SIREN and a ReLU MLP fit the cat video (512 × 512, 300 frames) with the official defaults (100,000 epochs). Final training PSNR:
